@@ -4,7 +4,17 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 
-export function SignOutButton() {
+type Props = {
+  variant?: 'outline' | 'ghost';
+  size?: 'default' | 'sm';
+  label?: string;
+};
+
+export function SignOutButton({
+  variant = 'outline',
+  size = 'default',
+  label = 'Sign out',
+}: Props) {
   const router = useRouter();
   async function signOut() {
     const supabase = createClient();
@@ -13,8 +23,13 @@ export function SignOutButton() {
     router.refresh();
   }
   return (
-    <Button variant="outline" onClick={signOut} className="w-full">
-      Sign out
+    <Button
+      variant={variant}
+      size={size}
+      onClick={signOut}
+      className={variant === 'outline' ? 'w-full' : undefined}
+    >
+      {label}
     </Button>
   );
 }
