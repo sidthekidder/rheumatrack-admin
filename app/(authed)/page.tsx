@@ -2,6 +2,7 @@ import { subDays, format } from 'date-fns';
 import { createClient } from '@/lib/supabase/server';
 import { logAdminAccess } from '@/lib/audit';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PatientsList } from '@/components/patients-list';
 import { complianceTextColor } from '@/lib/compliance';
 
 const WINDOW_DAYS = 30;
@@ -14,23 +15,33 @@ export default async function DashboardPage() {
   const since30 = format(subDays(new Date(), WINDOW_DAYS), 'yyyy-MM-dd');
   const since7 = format(subDays(new Date(), ACTIVITY_DAYS), 'yyyy-MM-dd');
 
-  const [{ count: totalPatients }, { data: logs30 }, { count: editsCount }] =
-    await Promise.all([
-      supabase.from('patients').select('*', { count: 'exact', head: true }),
-      supabase
-        .from('medication_log')
-        .select('patient_id, log_date, taken')
-        .gte('log_date', since30),
-      supabase
-        .from('medication_log_history')
-        .select('*', { count: 'exact', head: true })
-        .gte('edited_at', new Date(since7).toISOString()),
-      logAdminAccess('view_dashboard'),
-    ]);
+  const [
+    { count: totalPatients },
+    { data: patients, error: patientsError },
+    { data: logs30 },
+    { count: editsCount },
+  ] = await Promise.all([
+    supabase.from('patients').select('*', { count: 'exact', head: true }),
+    supabase
+      .from('patients')
+      .select('id, name, diagnosis, created_at, updated_at')
+      .order('created_at', { ascending: false })
+      .limit(200),
+    supabase
+      .from('medication_log')
+      .select('patient_id, log_date, taken')
+      .gte('log_date', since30),
+    supabase
+      .from('medication_log_history')
+      .select('*', { count: 'exact', head: true })
+      .gte('edited_at', new Date(since7).toISOString()),
+    logAdminAccess('view_dashboard'),
+  ]);
 
   const logs = logs30 ?? [];
 
-  // Per-patient rollup over the 30-day window.
+  // Per-patient rollup over the 30-day window — shared between metric cards and
+  // the patients table.
   const byPatient = new Map<string, { taken: number; total: number }>();
   for (const row of logs) {
     const cur = byPatient.get(row.patient_id) ?? { taken: 0, total: 0 };
@@ -50,6 +61,19 @@ export default async function DashboardPage() {
     logs.filter((l) => l.log_date >= since7).map((l) => l.patient_id),
   ).size;
   const logsLast7 = logs.filter((l) => l.log_date >= since7).length;
+
+  const enrichedPatients = (patients ?? []).map((p) => {
+    const r = byPatient.get(p.id);
+    return {
+      id: p.id,
+      name: p.name,
+      diagnosis: p.diagnosis,
+      created_at: p.created_at,
+      compliance_pct:
+        !r || r.total === 0 ? null : Math.round((r.taken / r.total) * 100),
+      log_count: r?.total ?? 0,
+    };
+  });
 
   return (
     <div className="space-y-6">
@@ -93,6 +117,20 @@ export default async function DashboardPage() {
           sub="patient corrections"
         />
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            Patients ({enrichedPatients.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {patientsError && (
+            <p className="text-sm text-destructive">{patientsError.message}</p>
+          )}
+          <PatientsList patients={enrichedPatients} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

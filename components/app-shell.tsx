@@ -3,7 +3,6 @@ import { SignOutButton } from '@/components/sign-out-button';
 
 const NAV = [
   { href: '/', label: 'Overview' },
-  { href: '/patients', label: 'Patients' },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
