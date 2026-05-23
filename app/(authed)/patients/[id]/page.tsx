@@ -16,6 +16,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { ComplianceChart } from '@/components/compliance-chart';
 import { DiaryEntryDialog } from '@/components/diary-entry-dialog';
+import { FlareTrendChart } from '@/components/flare-trend-chart';
 import {
   rollupCompliance,
   dailyComplianceSeries,
@@ -41,6 +42,7 @@ export default async function PatientDetailPage({
     { data: complianceLogs },
     { data: recentLogs },
     { data: history },
+    { data: flareEntries },
   ] = await Promise.all([
     supabase.from('patients').select('*').eq('id', id).maybeSingle(),
     supabase
@@ -66,6 +68,12 @@ export default async function PatientDetailPage({
       .eq('patient_id', id)
       .order('edited_at', { ascending: false })
       .limit(50),
+    supabase
+      .from('flare_entries')
+      .select('id, entry_date, pain, stiffness_min, fatigue, joints, notes')
+      .eq('patient_id', id)
+      .gte('entry_date', since)
+      .order('entry_date', { ascending: false }),
     logAdminAccess('view_patient', id),
   ]);
 
@@ -145,6 +153,42 @@ export default async function PatientDetailPage({
                   }))}
                 />
               )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">
+            Diary trend (last {COMPLIANCE_WINDOW_DAYS} days)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <FlareTrendChart entries={flareEntries ?? []} />
+          {flareEntries && flareEntries.length > 0 && (
+            <div>
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Recent entries
+              </div>
+              <div className="divide-y">
+                {flareEntries.slice(0, 8).map((e) => (
+                  <div key={e.id} className="flex items-center gap-3 py-2 text-sm">
+                    <span className="w-20 shrink-0 text-muted-foreground">
+                      {format(new Date(e.entry_date), 'MMM d, yyyy')}
+                    </span>
+                    <span className="flex-1">
+                      Pain <b>{e.pain}</b> · Stiff <b>{e.stiffness_min}m</b> ·
+                      Fatigue <b>{e.fatigue}</b>
+                      {e.joints && e.joints.length > 0 && (
+                        <span className="ml-2 text-muted-foreground">
+                          ({e.joints.length} joints)
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </CardContent>
