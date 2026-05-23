@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
+import { subDays, format } from 'date-fns';
 import { createClient } from '@/lib/supabase/server';
 import { logAdminAccess } from '@/lib/audit';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,8 +14,16 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { buttonVariants } from '@/components/ui/button';
-import { format } from 'date-fns';
+import { ComplianceChart } from '@/components/compliance-chart';
+import {
+  rollupCompliance,
+  dailyComplianceSeries,
+  complianceTextColor,
+  complianceBgColor,
+  complianceLabel,
+} from '@/lib/compliance';
+
+const COMPLIANCE_WINDOW_DAYS = 30;
 
 export default async function PatientDetailPage({
   params,
@@ -23,10 +32,12 @@ export default async function PatientDetailPage({
 }) {
   const { id } = await params;
   const supabase = await createClient();
+  const since = format(subDays(new Date(), COMPLIANCE_WINDOW_DAYS), 'yyyy-MM-dd');
 
   const [
     { data: patient },
     { data: meds },
+    { data: complianceLogs },
     { data: recentLogs },
     { data: history },
   ] = await Promise.all([
@@ -36,6 +47,12 @@ export default async function PatientDetailPage({
       .select('id, drug_name, brand_name, dose, schedule_type, start_date')
       .eq('patient_id', id)
       .order('start_date', { ascending: false }),
+    supabase
+      .from('medication_log')
+      .select('log_date, taken')
+      .eq('patient_id', id)
+      .gte('log_date', since)
+      .order('log_date', { ascending: true }),
     supabase
       .from('medication_log')
       .select('id, medicine_id, log_date, slot, taken, created_at')
@@ -53,6 +70,9 @@ export default async function PatientDetailPage({
 
   if (!patient) notFound();
 
+  const summary = rollupCompliance(complianceLogs ?? []);
+  const series = dailyComplianceSeries(complianceLogs ?? []);
+
   return (
     <div className="space-y-6">
       <Link
@@ -62,21 +82,66 @@ export default async function PatientDetailPage({
         <ArrowLeft className="size-4" />
         Back to patients
       </Link>
-      <div className="flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">{patient.name ?? 'Unnamed patient'}</h1>
-          <p className="text-sm text-muted-foreground">
-            {patient.diagnosis ?? 'No diagnosis recorded'} · {patient.city ?? '—'},{' '}
-            {patient.country ?? '—'}
-          </p>
-        </div>
-        <Link
-          href={`/patients/${id}/compliance`}
-          className={buttonVariants({ variant: 'outline' })}
-        >
-          Compliance graph
-        </Link>
+
+      <div>
+        <h1 className="text-2xl font-semibold">{patient.name ?? 'Unnamed patient'}</h1>
+        <p className="text-sm text-muted-foreground">
+          {patient.diagnosis ?? 'No diagnosis recorded'} · {patient.city ?? '—'},{' '}
+          {patient.country ?? '—'}
+        </p>
       </div>
+
+      {/* Compliance hero — big % + bar + chart */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">
+            Compliance (last {COMPLIANCE_WINDOW_DAYS} days)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {summary.total === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No medication-log entries in this window.
+            </p>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-end gap-4">
+                <div className={`text-5xl font-semibold ${complianceTextColor(summary.pct)}`}>
+                  {summary.pct}%
+                </div>
+                <div className="flex flex-col gap-1 pb-1 text-sm">
+                  <Badge
+                    variant="outline"
+                    className={`${complianceTextColor(summary.pct)} w-fit`}
+                  >
+                    {complianceLabel(summary.pct)}
+                  </Badge>
+                  <span className="text-muted-foreground">
+                    {summary.taken} taken · {summary.missed} missed of {summary.total}
+                  </span>
+                </div>
+              </div>
+
+              {/* Solid progress bar */}
+              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full rounded-full transition-all ${complianceBgColor(summary.pct)}`}
+                  style={{ width: `${summary.pct}%` }}
+                />
+              </div>
+
+              {series.length > 1 && (
+                <ComplianceChart
+                  data={series.map((s) => ({
+                    date: format(new Date(s.date), 'MMM d'),
+                    pct: s.pct,
+                  }))}
+                />
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
