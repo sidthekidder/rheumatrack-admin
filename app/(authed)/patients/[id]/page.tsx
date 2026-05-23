@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { ComplianceChart } from '@/components/compliance-chart';
+import { DiaryEntryDialog } from '@/components/diary-entry-dialog';
 import {
   rollupCompliance,
   dailyComplianceSeries,
@@ -83,12 +84,18 @@ export default async function PatientDetailPage({
         Back to overview
       </Link>
 
-      <div>
-        <h1 className="text-2xl font-semibold">{patient.name ?? 'Unnamed patient'}</h1>
-        <p className="text-sm text-muted-foreground">
-          {patient.diagnosis ?? 'No diagnosis recorded'} · {patient.city ?? '—'},{' '}
-          {patient.country ?? '—'}
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">{patient.name ?? 'Unnamed patient'}</h1>
+          <p className="text-sm text-muted-foreground">
+            {patient.diagnosis ?? 'No diagnosis recorded'} · {patient.city ?? '—'},{' '}
+            {patient.country ?? '—'}
+          </p>
+        </div>
+        <DiaryEntryDialog
+          patientId={id}
+          patientName={patient.name ?? 'this patient'}
+        />
       </div>
 
       {/* Compliance hero — big % + bar + chart */}

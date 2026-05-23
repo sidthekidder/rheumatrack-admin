@@ -8,7 +8,8 @@ export type AdminAction =
   | 'view_patient'
   | 'view_compliance'
   | 'view_patient_audit'
-  | 'view_global_audit';
+  | 'view_global_audit'
+  | 'create_diary_entry';
 
 export async function logAdminAccess(
   action: AdminAction,
